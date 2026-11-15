@@ -255,15 +255,17 @@ function IsAllFull()
     end
     return true
 end
--- BETUL: x tetap plantStartX, tapi y scan sampai baris paling atas (0 sampai height-1)
--- Benar-benar kosong = tidak ada satu pun 5640 di kolom plantStartX dari atas sampai bawah
-function IsFirstColumnTrulyEmpty()
+-- BETUL: scan 1 world penuh untuk seed 16707, tapi y hanya dari endY sampai startY, bukan dari tinggi world
+-- Benar-benar kosong = tidak ada satu pun 16707 di area tanam (x 0..endX, y endY..startY)
+function IsWorldTrulyEmpty()
     local w = GetWorld()
     if not w then return false end
-    for y = 0, w.height - 1, 1 do
-        local t = GetTileFresh(plantStartX, y)
-        if t and t.fg == 5640 then
-            return false
+    for x = 0, w.width - 1, 1 do
+        for y = endY, startY, 1 do
+            local t = GetTileFresh(x, y)
+            if t and t.fg == 16707 then
+                return false
+            end
         end
     end
     return true
@@ -405,12 +407,12 @@ while true do
     if not RUNNING or not INITED then
         Sleep(300)
     else
-        -- Kalau world sudah full, jangan PT lagi sampai kolom plantStartX benar-benar kosong sampai atas
-        while RUNNING and IsAllFull() and not IsFirstColumnTrulyEmpty() do
+        -- Kalau world sudah full, jangan PT lagi sampai scan area tanam benar-benar kosong (tidak ada 16707)
+        while RUNNING and IsAllFull() and not IsWorldTrulyEmpty() do
             PollToggle()
             if not RUNNING then break end
-            SetStatus("FULL - WAIT FIRST COLUMN EMPTY x=" .. plantStartX)
-            SetTile("x=" .. plantStartX .. " WAIT EMPTY")
+            SetStatus("FULL - WAIT WORLD EMPTY (16707)")
+            SetTile("WAIT SCAN 16707")
             Sleep(5000)
         end
         if not RUNNING then
