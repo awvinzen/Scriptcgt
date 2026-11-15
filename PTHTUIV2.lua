@@ -30,17 +30,12 @@ Script.On("OnVariant", "magplant_tracker", function(v)
         if dialog:find("magplant_edit") then
             local mx = tonumber(dialog:match("embed_data|x|(%d+)"))
             local my = tonumber(dialog:match("embed_data|y|(%d+)"))
-
-            -- BARU: pengkondisian dari Planting mode
-            -- ACTIVE = true, DISABLED = false
             local active = false
             if dialog:find("DISABLED") then
                 active = false
             elseif dialog:find("ACTIVE") then
                 active = true
             end
-            
-            -- Stock: "$61600 items." atau "EMPTY!"
             local isEmpty = false
             local stock = 0
             if dialog:find("Stock:%s*`?%d?EMPTY") or dialog:find("EMPTY!") or dialog:find("currently empty") then
@@ -54,7 +49,6 @@ Script.On("OnVariant", "magplant_tracker", function(v)
                 stock = tonumber(stockStr) or 0
                 if stock == 0 then isEmpty = true end
             end
-
             LastMagDialog = {x = mx, y = my, stock = stock, isEmpty = isEmpty, active = active}
             if stock > 0 then
                 MAGPLANT_EMPTY = false
@@ -186,11 +180,14 @@ function MoveTo(targetX, targetY)
             if dy > 0 then nextY = curY + step else nextY = curY - step end
         end
         Path(nextX, nextY)
-        Sleep(200) 
+        Sleep(200)
     end
 end
 function GoToPlant(x, y)
-    if curX ~= x or curY ~= y then MoveTo(x, y) end
+    if curX ~= x or curY ~= y then
+        MoveTo(x, y)
+        Sleep(100)
+    end
     if not RUNNING then return end
     Path(x, y)
     Sleep(20)
@@ -213,7 +210,7 @@ function PlantColumn(x, goingUp)
         if MAGPLANT_EMPTY then
             return false
         end
-               local fg = col[y]
+        local fg = col[y]
         local belowFg = col[y + 1]
         if fg ~= nil and belowFg ~= nil then
             if fg == 0 and belowFg ~= 0 and belowFg % 2 == 0 then
@@ -308,10 +305,21 @@ function MarkDead(mag)
     mag.dead = true
     mag.remoteTaken = true
 end
+-- FIX: magplant yang habis saat plant langsung ditandai dead, flag dibersihkan
+function HandleMagEmpty()
+    if CurrentMag ~= nil then
+        MarkDead(CurrentMag)
+        SetMag(CurrentMag.x, CurrentMag.y, "EMPTY")
+        CurrentMag = nil
+    end
+    MAGPLANT_EMPTY = false
+end
 function TakeNextRemote()
     if #mags == 0 then
         return nil
     end
+    -- FIX: buang flag basi dari magplant sebelumnya
+    MAGPLANT_EMPTY = false
     local aliveCount = 0
     for _, m in ipairs(mags) do
         if not m.dead then aliveCount = aliveCount + 1 end
@@ -329,9 +337,11 @@ function TakeNextRemote()
             SetStatus("CHECKING MAGPLANT x=" .. mag.x .. " y=" .. mag.y)
             SetMag(mag.x, mag.y, "?")
             LastMagDialog = {x = nil, y = nil, stock = 0, isEmpty = true, active = false}
+            MAGPLANT_EMPTY = false
             Pkt(mag.x, mag.y, 32)
             Sleep(800)
             if LastMagDialog.x == nil then
+                MAGPLANT_EMPTY = false
                 SendPacket(2, "action|dialog_return\ndialog_name|magplant_edit\nx|"..mag.x.."\ny|"..mag.y.."\nbuttonClicked|getRemote")
                 Sleep(500)
                 if MAGPLANT_EMPTY then
@@ -345,9 +355,8 @@ function TakeNextRemote()
                     SetMag(mag.x, mag.y, "REMOTE")
                     return mag
                 end
-                      elseif LastMagDialog.x ~= mag.x or LastMagDialog.y ~= mag.y then
+            elseif LastMagDialog.x ~= mag.x or LastMagDialog.y ~= mag.y then
                 SetMag(mag.x, mag.y, "SKIP")
-            -- BARU: patokan utama ACTIVE / DISABLED
             elseif LastMagDialog.active == false then
                 MarkDead(mag)
                 SetMag(mag.x, mag.y, "DISABLED")
@@ -355,7 +364,7 @@ function TakeNextRemote()
                 MarkDead(mag)
                 SetMag(mag.x, mag.y, "EMPTY")
             else
-                -- active == true, baru ambil remote
+                MAGPLANT_EMPTY = false
                 SendPacket(2, "action|dialog_return\ndialog_name|magplant_edit\nx|"..mag.x.."\ny|"..mag.y.."\nbuttonClicked|getRemote")
                 Sleep(500)
                 MAGPLANT_EMPTY = false
@@ -438,21 +447,26 @@ while true do
                     pass1Ok = false
                     break
                 end
-                            end
+            end
             if not pass1Ok then
                 SetStatus("MAGPLANT EMPTY - SWITCHING")
+                HandleMagEmpty()
             else
                 if not RUNNING then break end
                 local pass2Ok = DoPass2()
                 if not pass2Ok then
                     SetStatus("MAGPLANT EMPTY - SWITCHING")
+                    HandleMagEmpty()
                 end
             end
             if not RUNNING then break end
-            if not MAGPLANT_EMPTY then
+            -- FIX: kalau habis, langsung loop ambil remote baru, jangan break ke CHECKING FULL
+            if MAGPLANT_EMPTY then
+                HandleMagEmpty()
+                Sleep(200)
+            else
                 break
             end
-            Sleep(500)
         end
         if RUNNING then
             SetStatus("CHECKING FULL")
@@ -472,7 +486,7 @@ while true do
                     if not stillThere then
                         break
                     end
-                                    HarvestPass()
+                    HarvestPass()
                     attempt = attempt + 1
                     if attempt > 5 then
                         break
