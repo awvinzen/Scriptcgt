@@ -176,40 +176,43 @@ function Path(x, y)
     curX = fx
     curY = fy
 end
+-- Hanya ada MoveTo, tidak ada MoveToNear
 function MoveTo(targetX, targetY)
     while curX ~= targetX or curY ~= targetY do
         if not RUNNING then return end
         local nextX = curX
         local nextY = curY
         if curX ~= targetX then
-            local dx = targetX - curX
-            local step = 1
-            if math.abs(dx) < 1 then step = math.abs(dx) end
-            if dx > 0 then nextX = curX + step else nextX = curX - step end
+            if targetX > curX then nextX = curX + 1 else nextX = curX - 1 end
         elseif curY ~= targetY then
-            local dy = targetY - curY
-            local step = 1
-            if math.abs(dy) < 1 then step = math.abs(dy) end
-            if dy > 0 then nextY = curY + step else nextY = curY - step end
+            if targetY > curY then nextY = curY + 1 else nextY = curY - 1 end
         end
         Path(nextX, nextY)
         Sleep(70)
     end
 end
-function GoToPlant(x, y)
-    if curX ~= x or curY ~= y then
-        MoveTo(x, y)
+-- Target diubah jadi antara -2x atau -2y
+function GetNearTarget(tx, ty)
+    local dx = math.abs(curX - tx)
+    local dy = math.abs(curY - ty)
+    if dx >= dy then
+        return tx - 2, ty
+    else
+        return tx, ty - 2
     end
+end
+function GoToPlant(x, y)
+    local nx, ny = GetNearTarget(x, y)
+    MoveTo(nx, ny)
     if not RUNNING then return end
-    Path(x, y)
     Sleep(140)
 end
 function GoToHarvest(x, y)
-    if curX ~= x or curY ~= y then MoveTo(x, y) end
+    local nx, ny = GetNearTarget(x, y)
+    MoveTo(nx, ny)
     if not RUNNING then return end
-    Path(x, y)
     Sleep(100)
-    Path(x, y)
+    Path(curX, curY)
     Sleep(100)
 end
 function PlantColumn(x, goingUp)
